@@ -20,6 +20,7 @@ PDB
 """
 
 import argparse
+from .topol import TOPOL
 
 
 def options():
@@ -67,7 +68,7 @@ def options():
 
 def main():
     args = options()
-    print(args)
+    TOPOL(**args)
 
 
 # RUN
