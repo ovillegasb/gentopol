@@ -2,59 +2,9 @@
 """
 
 import os
-import numpy as np
 from gentopol import algebra as al
 import networkx as nx
 from gentopol import files
-
-
-def AsisZmat(file, opt, res):
-    name, ext = file.split('.')
-
-    # if file.endswith('pdb'):
-
-    print(name, ext)
-
-
-# def Gen_mol_rep(file, opt, res, charge):
-#     Zmat(file, opt, res)
-
-
-def load_mol(file):
-    """Carga un archivo .mol."""
-    mollines = open(file, 'r').readlines()
-    print(mollines)
-
-    [nats, nbonds] = map(int, (mollines[3][0:3], mollines[3][3:6]))
-    print('N atoms:', nats)
-    print('N bonds:', nbonds)
-
-    coordlines = mollines[4:4 + nats]
-    print(coordlines)
-
-    coord = {}
-    atsb = {}
-
-    for i in range(nats):
-        els = coordlines[i].split()
-        coord[i + 1] = np.array([float(e) for e in els[0:3]])
-        atsb[i + 1] = els[3]
-
-    print(atsb)
-    print(coord)
-
-    bondlines = mollines[4 + nats:4 + nats + nbonds]
-    bonds = {'BI': [], 'BJ': [], 'RIJ': [], 'UID': []}
-    print(bondlines)
-
-    for line in bondlines:
-        [bi, bj] = map(int, [line[0:3], line[3:6]])
-        bonds['BI'].append(bi)
-        bonds['BJ'].append(bj)
-        bonds['RIJ'].append(al.distance(coord[bi], coord[bj]))
-        bonds['UID'].append(al.pairing_func(bi, bj))
-
-    return coord, atsb, bonds
 
 
 def ZMAT(file, opt, res, charge):
@@ -63,21 +13,15 @@ def ZMAT(file, opt, res, charge):
     # create a MOL file from any file
     os.system(
         'babel -i{} {} -omol {}.mol --title {} ---errorlevel 1 -b &>LL'.format(
-            ext, file, name, name
+            ext, file, res, name
         )
     )
 
-    # COOS, ATYPES, MolBonds = load_mol(f'{name}.mol')
-    # G_mol, mol_icords = make_graphs(ATYPES, COOS, MolBonds)
     if ext.lower() == 'pdb':
         dfatoms, bonds = files.read_pdb(file)
 
     connect = connectivity(dfatoms, bonds)
-    print(connect)
-
     mol_icords = connect.get_geometry()
-
-    print(mol_icords)
 
     files.save_zmat(dfatoms, connect, mol_icords, res)
 
@@ -111,10 +55,6 @@ class connectivity(nx.DiGraph):
 
     def get_geometry(self):
         all_ps = dict(nx.algorithms.all_pairs_shortest_path_length(self))
-        print(all_ps)
-
-        print(list(self.edges))
-        print(list(self.nodes))
 
         all_paths = []
         for s in all_ps:
@@ -126,34 +66,21 @@ class connectivity(nx.DiGraph):
                 elif all_ps[s][e] == 3:
                     all_paths += list(nx.algorithms.all_simple_paths(self, s, e, cutoff=3))
 
-        print(all_paths)
-
         all_bonds = [p for p in all_paths if len(set(p)) == 2]
         new_angs = [p for p in all_paths if len(set(p)) == 3]
         new_tors = [p for p in all_paths if len(set(p)) == 4]
-
-        print('Bonds', all_bonds)
-        print('Angles', new_angs)
-        print('Dihedrals', new_tors)
 
         dict_new_bds = {al.pairing_func(t[0], t[1]): t for t in all_bonds}
         dict_new_angs = {al.ang_id(t): t for t in new_angs}
         dict_new_tors = {al.tor_id(t): t for t in new_tors}
 
-        print(dict_new_bds)
-        print(dict_new_angs)
-        print(dict_new_tors)
-
         imp_keys = [n for n in self.nodes() if self.nbonds(n) == 3]
-        print(imp_keys)
 
         all_imps = {}
         for i in imp_keys:
             nei = list(self.neighbors(i))
             if self.nodes[i]['atnum'] == 6:
                 all_imps[i] = [nei[0], i, nei[1], nei[2]]
-
-        print(all_imps)
 
         MOL_ICOORDS = {
             'BONDS': dict_new_bds,
@@ -181,7 +108,7 @@ def get_OPT(zmat, opt, charge):
     execs = {
         # 2: os.environ['BOSSdir'] + '/scripts/xZCM1A+2 > /tmp/olog',
         # -2: os.environ['BOSSdir'] + '/scripts/xZCM1A-2 > /tmp/olog',
-        0: os.environ['BOSSdir'] + '/scripts/xZCM1A > /tmp/olog',
+        0: os.environ['BOSSdir'] + '/scripts/xZCM1A > olog',
         # 1: os.environ['BOSSdir'] + '/scripts/xZCM1A+  > /tmp/olog',
         # -1: os.environ['BOSSdir'] + '/scripts/xZCM1A-  > /tmp/olog',
     }
@@ -189,14 +116,14 @@ def get_OPT(zmat, opt, charge):
     print('MOLECULE HAS A CHARGE of %d' % charge)
     execfile = execs[charge]
     commad = execfile + ' ' + zmat[:-2]
-    print(commad)
+    # print(commad)
     os.system(commad)
 
     os.system('cp sum %s' % (zmat))
     # 2) Single-point, save the files plt.pdb and sum (Z-matrix)
-    execfile = os.environ['BOSSdir'] + '/scripts/xSPM > /tmp/olog'
+    execfile = os.environ['BOSSdir'] + '/scripts/xSPM > olog'
     commad = execfile + ' ' + zmat[:-2]
-    print(commad)
+    # print(commad)
     os.system(commad)
     os.system('cp sum %s' % (zmat))
 
@@ -204,21 +131,21 @@ def get_OPT(zmat, opt, charge):
     if opt > 0:
         print('Optimization level requested %d' % opt)
         for opt_lev in range(opt):
-            print('Performing Stage %d of Charge Generation' % (opt_lev + 1))
+            # print('Performing Stage %d of Charge Generation' % (opt_lev + 1))
             execfile = execs[charge]
             commad = execfile + ' ' + zmat[:-2]
-            print(commad)
+            # print(commad)
             os.system(commad)
             os.system('cp sum %s' % (zmat))
 
             # Optimization etape
-            execfile = os.environ['BOSSdir'] + '/scripts/xOPT > /tmp/olog'
+            execfile = os.environ['BOSSdir'] + '/scripts/xOPT > olog'
             commad = execfile + ' ' + zmat[:-2]
             os.system(commad)
             os.system('cp sum %s' % (zmat))
 
         # 4) final single-point
-        execfile = os.environ['BOSSdir'] + '/scripts/xSPM > /tmp/olog'
+        execfile = os.environ['BOSSdir'] + '/scripts/xSPM > olog'
         commad = execfile + ' ' + zmat[:-2]
         os.system(commad)
         os.system('cp sum %s' % (zmat))

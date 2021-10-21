@@ -11,29 +11,29 @@ Modificacionres realizadas por Orlando Villegas
 """
 
 import pickle
+import re
 import pandas as pd
 import numpy as np
 from gentopol.BOSStools import bossPdbAtom2Element, bossElement2Mass, pairing_func, ucomb
-from gentopol.files import read_pdb, save_gro
+from gentopol.files import read_pdb, save_gro, Molecular
 
 
 def bossData(molecule_data):
     """Extrae la data referente al tipo de atomos y los parametros de VDW."""
     ats_file = molecule_data.MolData['ATOMS']
+    # [atsb, 'opls_000']
     types = []
     for i in enumerate(ats_file):
         types.append([i[1].split()[1], 'opls_' + i[1].split()[2]])
 
-    print(types)
     st_no = 3
+    # ['tp', 'charge', 'sigma', 'epsilon']
     Qs = molecule_data.MolData['Q_LJ']
-    print(Qs)
     assert len(Qs) == len(types), 'Please check the at_info and Q_LJ_dat files'
-
+    # {i, 'tp'}
     num2opls = {}
     for i in range(0, len(types)):
         num2opls[i] = Qs[i][0]
-    print(num2opls)
 
     # {i: ['AT0i', 'opls_80i', 'AT80i', 'AT', 'mass', 'atype']}
     num2typ2symb = {i: types[i] for i in range(len(Qs))}
@@ -48,8 +48,6 @@ def bossData(molecule_data):
             bossElement2Mass(num2typ2symb[i][3])
         )
         num2typ2symb[i].append(Qs[i][0])
-
-    print(num2typ2symb)
 
     return types, Qs, num2opls, st_no, num2typ2symb
 
@@ -72,7 +70,7 @@ def boss2gmxBond(mol, st_no):
                     (dfbond.cl1 + dfbond.cl2 + 1) * 0.5) + dfbond.cl1
     # -------
 
-    print(dfbond)
+    # print(dfbond)
     # connects = []
     # for ai, aj in zip(dfbond.cl1, dfbond.cl2):
     #     # ai   aj    func
@@ -95,7 +93,7 @@ def boss2gmxAngle(mol, num2opls, st_no):
                              for i, j, k in zip(dfangle.cl1, dfangle.cl2, dfangle.cl3)])
     # ang_df = ang_df.drop_duplicates(['TY'])
     # full_ang = ang_df.copy()
-    print(dfangle)
+    # print(dfangle)
 
     return dfangle
 
@@ -134,7 +132,7 @@ def boss2opmTorsion(mol, num2opls, dfbond, st_no):
     dfdih = pd.concat([dfdih, dfat], axis=1).reindex()
 
     bndlist = list(dfbond.UR) + (list(dfbond.UR))
-    print(bndlist)
+    # print(bndlist)
 
     # final_df['TY'] = ['Proper' if ucomb(list([final_df.I[n], final_df.J[n], final_df.K[
     #     n], final_df.L[n]]), bndlist) == 3 else 'Improper' for n in range(len(final_df.I))]
@@ -163,8 +161,8 @@ def boss2opmTorsion(mol, num2opls, dfbond, st_no):
         )
         tor_bos = tor_bos.drop_duplicates()
         df = dfdih.loc[tor_bos.index, :]
-        print(dfdih)
-        print(df)
+        # print(dfdih)
+        # print(df)
         return dfdih, df
     else:
         return dfdih, dfdih
@@ -234,26 +232,72 @@ def gmxPairs(tors, ang, bond):
     return list(NP_T.TY)
 
 
+def charge_correction(table):
+    """Corrects charges to 3 significant digits and ensures zero total charge."""
+    charges = table.charge.values
+    charges = np.around(charges, decimals=3)
+    table['charge'] = charges
+
+    print("Total charge initial %.3f" % np.sum(charges))
+
+    if np.around(np.sum(charges), decimals=3) == 0.000:
+        test = table
+
+    else:
+        iters = int(round(np.sum(charges) / 0.001))
+        print(iters)
+
+        while iters != 0:
+            print('Iteration:', iters)
+            if iters > 0:
+                test = table.sort_values(by=['charge'], ascending=True)
+                test.iloc[0, 6] -= 0.001
+                iters -= 1
+            elif iters < 0:
+                test = table.sort_values(by=['charge'], ascending=False)
+                test.iloc[0, 6] += 0.001
+                iters += 1
+            table = test.sort_index()
+
+    print("Total charge final %.3f" % test.charge.sum())
+    return test.sort_index()
+
+
 def save2GMX(res):
+    """Saves the optimized system status in itp and gro files."""
     mol = pickle.load(open(res + ".p", "rb"))
-    pdb_file = 'plt.pdb'
+    pdb_file = './plt.pdb'
+    dfatoms, _ = read_pdb(pdb_file)
 
     types, Qs, num2opls, st_no, num2typ2symb = bossData(mol)
+    dfatoms['charge'] = np.array(Qs)[:, 1].astype(np.float64)
+    dfatoms = charge_correction(dfatoms)
+    info = Molecular(dfatoms)
+    print(dfatoms)
 
     # Saving ITP file.
     lines = ''
-    lines += '; Writted by Orlando Villegas - orlando.villegas@univ-pau.fr\n'
+    lines += '; Writted by Orlando Villegas - 2021\n'
+    lines += '; mail: orlando.villegas@univ-pau.fr \n'
+    lines += ';' + '-' * 60 + '\n'
     lines += '; Modifications to the LigParGen script\n'
     lines += '; Writted by Leela S. Dodda leela.dodda@yale.edu\n'
     lines += '; from Jorgensen Lab @ Yale University\n'
+    lines += ';' + '-' * 60 + '\n'
+    lines += '; Formula: {} \n'.format(info['formula'])
+    lines += '; MM: {:.3f} \n'.format(info['MM'])
+    lines += '; DBE: {} \n'.format(info['DBE'])
+    lines += '; M. Dipolar: {:.3f} \n'.format(info['dipolar'])
+    lines += '; Total Charge: {:.3f} \n'.format(dfatoms.charge.sum())
+    lines += ';' + '-' * 60 + '\n'
     lines += ';\n'
 
     # Atoms types.
     lines += '\n[ atomtypes ]\n'
     for i in range(len(Qs)):
-        lines += '{:>10} {:>5} {:10.4f}     0.000    A    {:10.5E}\n'.format(
-            num2typ2symb[i][1],
-            num2typ2symb[i][2],
+        lines += '{:>10} {:>5} {:10.4f}     0.000    A    {:10.5E}   {:10.5E}\n'.format(
+            re.sub('opls_8', f'{res.lower()}_', num2typ2symb[i][1]),  # atom type
+            re.sub(r'(\w)8(\w\w\Z)', r'\1\2', num2typ2symb[i][2]),
             num2typ2symb[i][4],
             float(Qs[i][2]) * 0.1,
             float(Qs[i][3]) * 4.184
@@ -268,14 +312,14 @@ def save2GMX(res):
     lines += '\n[ atoms ]\n'
     lines += ';   nr       type  resnr residue  atom   cgnr     charge       mass  \n'
     for i in range(len(Qs)):
-        lines += ' {:5d} {:>10} {:6d} {:>6} {:>5} {:6d} {:>10} {:10.4f} \n'.format(
+        lines += ' {:5d} {:>10} {:6d} {:>6} {:>5} {:6d} {:10.3f} {:10.4f} \n'.format(
             i + 1,
-            num2typ2symb[i][1],
+            re.sub('opls_8', f'{res.lower()}_', num2typ2symb[i][1]),
             1,
             res.upper(),
-            num2typ2symb[i][0],
+            dfatoms.loc[i + 1, 'atsb'],
             int(((i + 1) / 33.0) + 1),  # revisar
-            Qs[i][1],
+            dfatoms.loc[i + 1, 'charge'],
             num2typ2symb[i][4]
         )
 
@@ -326,7 +370,7 @@ def save2GMX(res):
     if len(tor_df.index) != len(dfdih.index):
         lines += '\n[ dihedrals ]\n'
         lines += '; IMPROPER DIHEDRAL ANGLES \n'
-        lines += ';  ai    aj    ak    al funct            c0            c1            c2            c3            c4            c5\n'
+        # lines += ';  ai    aj    ak    al funct            c0            c1            c2            c3            c4            c5\n'
 
         for i, improper in dfdih[dfdih.TY == 'Improper'].iterrows():
             for st in gmxImp(improper):
@@ -334,7 +378,7 @@ def save2GMX(res):
 
         lines += '\n[ dihedrals ]\n'
         lines += '; PROPER DIHEDRAL ANGLES\n'
-        lines += ';  ai    aj    ak    al funct            c0            c1            c2            c3            c4            c5\n'
+        # lines += ';  ai    aj    ak    al funct            c0            c1            c2            c3            c4            c5\n'
 
         for i, dihedral in dfdih[dfdih.TY == 'Proper'].iterrows():
             for st in gmxDihed(dihedral):
@@ -346,7 +390,6 @@ def save2GMX(res):
     for pair in ppairs:
         lines += '%s    1\n' % pair
 
-    dfatoms, _ = read_pdb(pdb_file)
     print(dfatoms)
 
     # writing all

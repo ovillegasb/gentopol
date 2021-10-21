@@ -17,20 +17,17 @@ def Refine_file(fname):
 
 class BOSSReader:
 
-    def __init__(self, zmatrix, opt, charge):
-
+    def __init__(self, zmatrix):
         self.zmat = zmatrix
-        self.MolData = self.get_ImpDat(opt, charge)
+        self.MolData = self.get_ImpDat()
 
-    def get_ImpDat(self, opt, charge):
-        # self.Get_OPT(optim, charge)
-
+    def get_ImpDat(self):
+        """Import data from the optimization output files."""
         odat = Refine_file('./out')
         sdat = Refine_file(self.zmat)
 
         MolData = {}
         impDat = {}
-
         MolData['PDB'] = Refine_file('./plt.pdb')
 
         for nl in range(len(odat)):
@@ -70,38 +67,38 @@ class BOSSReader:
         MolData['ATOMS'] = self.get_atinfo(
             odat[impDat['ATMinit']:impDat['ATMfinal']]
             )
-        print(MolData['ATOMS'])
+        # print(MolData['ATOMS'])
         MolData['Q_LJ'] = self.get_QLJ(
             odat[impDat['NBDinit']:impDat['NBDfinal']]
             )
-        print(MolData['Q_LJ'])
+        # print(MolData['Q_LJ'])
         MolData['BONDS'] = self.get_bonds(
             odat[impDat['BNDinit']:impDat['BNDfinal']]
             )
-        print(MolData['BONDS'])
+        # print(MolData['BONDS'])
         MolData['ANGLES'] = self.get_angs(
             odat[impDat['ANGinit']:impDat['ANGfinal']]
             )
-        print(MolData['ANGLES'])
+        # print(MolData['ANGLES'])
         MolData['TORSIONS'] = self.get_tors(
             odat[impDat['TORinit']:impDat['TORfinal']]
             )
-        print(MolData['TORSIONS'])
+        # print(MolData['TORSIONS'])
         MolData['ADD_DIHED'] = self.get_addihed(
             sdat[impDat['ADDinit']:impDat['ADDfinal']]
             )
-        print(MolData['ADD_DIHED'])
+        # print(MolData['ADD_DIHED'])
         MolData['XYZ'] = self.get_XYZ(
             odat[impDat['XYZinit']:impDat['XYZfinal']]
             )
-        print(MolData['XYZ'])
+        # print(MolData['XYZ'])
         MolData['PAIRS'] = self.get_pairs(
             odat[impDat['PAIRinit']:impDat['PAIRfinal']]
             )
-        print(MolData['PAIRS'])
+        # print(MolData['PAIRS'])
         MolData['TotalQ'] = self.get_charge(
             odat[impDat['TotalQ']:impDat['TotalQ'] + 4])
-        print(MolData['TotalQ'])
+        # print(MolData['TotalQ'])
 
         return MolData
 

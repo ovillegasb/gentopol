@@ -21,6 +21,7 @@ def angle(p0, p1, p2):
 
 
 def pairing_func(a, b):
+    """The pairing function adds an identifier for each bond."""
     ans = (a + b) * (a + b + 1) * 0.5
     if a > b:
         ans = ans + a

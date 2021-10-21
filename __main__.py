@@ -20,7 +20,7 @@ PDB
 """
 
 import argparse
-from .topol import TOPOL
+from gentopol.topol import TOPOL
 
 
 def options():

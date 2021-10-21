@@ -16,15 +16,18 @@ def TOPOL(**kwargs):
     file = kwargs['file']
     opt = kwargs['opt']
     charge = kwargs['charge']
-    res = kwargs['resname']
+    res = kwargs['resname'].lower()
 
     assert which('babel'), "OpenBabel is Not installed or the executable location is not accessable"
 
+    # save file res.z
     ZMAT(file, opt, res, charge)
 
+    # optimize geometry
     get_OPT('%s.z' % res, opt, charge)
 
-    mol = BOSSReader('%s.z' % res, opt, charge)
+    # Read the new geometry in a class
+    mol = BOSSReader('%s.z' % res)
 
     assert (mol.MolData['TotalQ']['Reference-Solute'] ==
             charge), "PROPOSED CHARGE IS NOT POSSIBLE: SOLUTE MAY BE AN OPEN SHELL"
@@ -32,11 +35,14 @@ def TOPOL(**kwargs):
     assert(Check_H(mol.MolData['ATOMS'])
            ), "Hydrogens are not added. Please add Hydrogens"
 
+    # saves the information in a binary
     pickle.dump(mol, open(res + ".p", "wb"))
 
     # Saving to GROMACS files
     save2GMX(res)
     print('Done')
 
-    os.remove(res + ".p")
+    os.system(f'rm -v {res}.p')
+    os.system(f'rm -v {res}.mol')
+    os.system(f'rm -v {res}.z')
     mol.cleanup()
